@@ -46,6 +46,11 @@ export function ControlPanel() {
           <option value="simplex">Simplex (5-cell)</option>
           <option value="orthoplex">Orthoplex (16-cell)</option>
           {dimension === 4 && <option value="24-cell">24-cell</option>}
+          {dimension === 4 && <option value="600-cell">600-cell</option>}
+          {dimension === 4 && <option value="clifford-torus">Clifford Torus</option>}
+          {dimension === 4 && <option value="duocylinder">Duocylinder</option>}
+          {dimension === 4 && <option value="hypercone">Hypercone</option>}
+          {dimension === 4 && <option value="grand-antiprism">Grand Antiprism</option>}
         </select>
       </div>
 
@@ -237,6 +242,7 @@ function PhysicsControls() {
     setPhysicsEnabled,
     gravityAxis,
     setGravityAxis,
+    resetPhysics,
   } = useAppStore();
 
   const axisNames = ['X', 'Y', 'Z', 'W', 'V', 'U'];
@@ -245,16 +251,26 @@ function PhysicsControls() {
     <div className="mt-4 pt-4 border-t border-gray-700">
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm text-gray-400">🎮 Physics Mode</label>
-        <button
-          onClick={() => setPhysicsEnabled(!physicsEnabled)}
-          className={`px-3 py-1 rounded text-sm ${
-            physicsEnabled 
-              ? 'bg-red-600 hover:bg-red-700' 
-              : 'bg-gray-700 hover:bg-gray-600'
-          }`}
-        >
-          {physicsEnabled ? 'On' : 'Off'}
-        </button>
+        <div className="flex gap-2">
+          {physicsEnabled && (
+            <button
+              onClick={resetPhysics}
+              className="px-2 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600"
+            >
+              Reset
+            </button>
+          )}
+          <button
+            onClick={() => setPhysicsEnabled(!physicsEnabled)}
+            className={`px-3 py-1 rounded text-sm ${
+              physicsEnabled 
+                ? 'bg-red-600 hover:bg-red-700' 
+                : 'bg-gray-700 hover:bg-gray-600'
+            }`}
+          >
+            {physicsEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
       </div>
       
       {physicsEnabled && (

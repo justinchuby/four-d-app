@@ -34,6 +34,7 @@ export interface AppState {
   // Physics simulation
   physicsEnabled: boolean;
   gravityAxis: number; // 0=X, 1=Y, 2=Z, 3=W
+  physicsResetKey: number; // Increment to trigger reset
   
   // Actions
   setGeometryType: (type: AppState['geometryType']) => void;
@@ -52,6 +53,7 @@ export interface AppState {
   toggleSliceAnimation: () => void;
   setPhysicsEnabled: (enabled: boolean) => void;
   setGravityAxis: (axis: number) => void;
+  resetPhysics: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -70,7 +72,8 @@ export const useAppStore = create<AppState>((set) => ({
   slicePosition: 0,
   sliceAnimating: false,
   physicsEnabled: false,
-  gravityAxis: 3, // W axis by default
+  gravityAxis: 1, // Y axis by default (more intuitive)
+  physicsResetKey: 0,
   
   // Actions
   setGeometryType: (type) => set({ geometryType: type, customGeometry: null, physicsEnabled: false }),
@@ -141,4 +144,6 @@ export const useAppStore = create<AppState>((set) => ({
   setPhysicsEnabled: (enabled) => set({ physicsEnabled: enabled, isAnimating: !enabled }),
   
   setGravityAxis: (axis) => set({ gravityAxis: axis }),
+  
+  resetPhysics: () => set((state) => ({ physicsResetKey: state.physicsResetKey + 1 })),
 }));

@@ -4,7 +4,11 @@ import * as THREE from 'three';
 import { useAppStore } from '../../stores/appStore';
 import { PhysicsEngine } from '../../core/physics';
 import { projectTo3D, type ProjectionConfig } from '../../core/projection';
-import { createHypercube, createSimplex, createOrthoplex, create24Cell, type GeometryND } from '../../core/geometry';
+import { 
+  createHypercube, createSimplex, createOrthoplex, create24Cell,
+  create600Cell, createCliffordTorus, createDuocylinder, createHypercone, createGrandAntiprism,
+  type GeometryND 
+} from '../../core/geometry';
 
 function createGeometry(type: string, dimension: number): GeometryND {
   switch (type) {
@@ -12,6 +16,11 @@ function createGeometry(type: string, dimension: number): GeometryND {
     case 'simplex': return createSimplex(dimension);
     case 'orthoplex': return createOrthoplex(dimension);
     case '24-cell': return create24Cell();
+    case '600-cell': return create600Cell();
+    case 'clifford-torus': return createCliffordTorus();
+    case 'duocylinder': return createDuocylinder();
+    case 'hypercone': return createHypercone();
+    case 'grand-antiprism': return createGrandAntiprism();
     default: return createHypercube(dimension);
   }
 }
@@ -30,6 +39,7 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
     viewDistance,
     physicsEnabled,
     gravityAxis,
+    physicsResetKey,
   } = useAppStore();
 
   // Create base geometry
@@ -42,13 +52,11 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
 
   // Physics engine reference
   const physicsRef = useRef<PhysicsEngine | null>(null);
-  const initializedRef = useRef(false);
 
-  // Initialize physics when geometry changes
+  // Initialize or reset physics when geometry changes or reset is triggered
   useEffect(() => {
     if (!physicsEnabled) {
       physicsRef.current = null;
-      initializedRef.current = false;
       return;
     }
 
@@ -56,8 +64,7 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
     engine.addGeometryParticles(baseGeometry.vertices);
     engine.setGravityAxis(gravityAxis);
     physicsRef.current = engine;
-    initializedRef.current = true;
-  }, [physicsEnabled, baseGeometry, dimension, gravityAxis]);
+  }, [physicsEnabled, baseGeometry, dimension, gravityAxis, physicsResetKey]);
 
   // Update gravity when axis changes
   useEffect(() => {
@@ -81,11 +88,11 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
     }
     const avgLength = totalLength / baseGeometry.edges.length;
 
-    // Step physics with spring constraints
+    // Step physics with clamped delta for stability
     physicsRef.current.step(delta, baseGeometry.edges);
     
-    // Also apply springs to maintain structure
-    physicsRef.current.applySpringForces(baseGeometry.edges, avgLength, 3);
+    // Additional spring passes for structure stability
+    physicsRef.current.applySpringForces(baseGeometry.edges, avgLength, 0.2);
 
     // Get simulated positions
     const positions = physicsRef.current.getPositions();
@@ -185,8 +192,24 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
   const showWireframe = renderMode === 'wireframe' || renderMode === 'both';
   const showFaces = renderMode === 'solid' || renderMode === 'both';
 
+  // Boundary box size (projected from physics bounds)
+  const boxSize = 4; // Approximate 3D projection of 4D bounds
+
   return (
     <group>
+      {/* Boundary box to show the physics container */}
+      <group>
+        <mesh position={[0, -boxSize/2, 0]}>
+          <planeGeometry args={[boxSize, boxSize]} />
+          <meshBasicMaterial color="#331111" transparent opacity={0.3} side={THREE.DoubleSide} />
+        </mesh>
+        <lineSegments>
+          <edgesGeometry args={[new THREE.BoxGeometry(boxSize, boxSize, boxSize)]} />
+          <lineBasicMaterial color="#663333" transparent opacity={0.4} />
+        </lineSegments>
+      </group>
+
+      {/* The physics-simulated geometry */}
       {showFaces && baseGeometry.faces && baseGeometry.faces.length > 0 && (
         <mesh geometry={meshRef.current}>
           <meshBasicMaterial vertexColors transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
@@ -198,7 +221,7 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
             <lineBasicMaterial vertexColors linewidth={lineWidth} />
           </lineSegments>
           <points geometry={pointsRef.current}>
-            <pointsMaterial vertexColors size={0.12} sizeAttenuation />
+            <pointsMaterial vertexColors size={0.15} sizeAttenuation />
           </points>
         </>
       )}

@@ -16,20 +16,17 @@ export class PhysicsEngine {
   particles: Particle[] = [];
   dimension: number;
   gravity: VectorND;
-  damping: number = 0.995;
+  damping: number = 0.96;  // Strong damping for stability
+  timeScale: number = 1.0; // Normal time scale
   
   // Simulation bounds
-  bounds: { min: number; max: number } = { min: -2.5, max: 2.5 };
+  bounds: { min: number; max: number } = { min: -2, max: 2 };
   
   constructor(dimension: number) {
     this.dimension = dimension;
-    // Default gravity points "down" in W direction for 4D
+    // Default gravity points "down" in Y direction (more intuitive)
     const gravityComponents = new Array(dimension).fill(0);
-    if (dimension >= 4) {
-      gravityComponents[3] = -0.3; // Gravity in W direction
-    } else {
-      gravityComponents[Math.min(1, dimension - 1)] = -0.3; // Gravity in Y
-    }
+    gravityComponents[Math.min(1, dimension - 1)] = -3;
     this.gravity = new VectorND(gravityComponents);
   }
   
@@ -56,7 +53,7 @@ export class PhysicsEngine {
   /**
    * Apply spring forces to maintain edge connections
    */
-  applySpringForces(edges: [number, number][], restLength = 1, stiffness = 2): void {
+  applySpringForces(edges: [number, number][], restLength = 1, stiffness = 0.3): void {
     for (const [i, j] of edges) {
       if (i >= this.particles.length || j >= this.particles.length) continue;
       
@@ -68,10 +65,12 @@ export class PhysicsEngine {
       if (dist < 0.001) continue;
       
       const displacement = dist - restLength;
-      const force = diff.normalize().scale(displacement * stiffness);
+      // Use less stiffness to avoid oscillation
+      const force = diff.normalize().scale(displacement * stiffness * 0.5);
       
-      p1.velocity = p1.velocity.add(force.scale(0.5 / p1.mass));
-      p2.velocity = p2.velocity.subtract(force.scale(0.5 / p2.mass));
+      // Apply force proportional to mass
+      p1.velocity = p1.velocity.add(force.scale(1 / p1.mass));
+      p2.velocity = p2.velocity.subtract(force.scale(1 / p2.mass));
     }
   }
   
@@ -143,9 +142,12 @@ export class PhysicsEngine {
    * Step the simulation forward
    */
   step(deltaTime: number, edges?: [number, number][]): void {
+    // Clamp delta time to prevent instability
+    const dt = Math.min(deltaTime, 0.033) * this.timeScale;
+    
     // Apply gravity
     for (const particle of this.particles) {
-      particle.velocity = particle.velocity.add(this.gravity.scale(deltaTime));
+      particle.velocity = particle.velocity.add(this.gravity.scale(dt));
     }
     
     // Apply spring forces if edges provided
@@ -153,13 +155,11 @@ export class PhysicsEngine {
       this.applySpringForces(edges);
     }
     
-    // Apply collisions
-    this.applyCollisions();
-    
-    // Update positions
+    // Update positions with damping
     for (const particle of this.particles) {
-      particle.position = particle.position.add(particle.velocity.scale(deltaTime));
+      // Apply damping before position update
       particle.velocity = particle.velocity.scale(this.damping);
+      particle.position = particle.position.add(particle.velocity.scale(dt));
     }
     
     // Apply boundary constraints

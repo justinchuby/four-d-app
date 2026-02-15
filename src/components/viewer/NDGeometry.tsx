@@ -4,7 +4,11 @@ import * as THREE from 'three';
 import { useAppStore } from '../../stores/appStore';
 import { MatrixND, RotationND, getRotationPlanes, getRotationPlaneNames } from '../../core/math';
 import { projectTo3D, type ProjectionConfig } from '../../core/projection';
-import { createHypercube, createSimplex, createOrthoplex, create24Cell, type GeometryND } from '../../core/geometry';
+import { 
+  createHypercube, createSimplex, createOrthoplex, create24Cell,
+  create600Cell, createCliffordTorus, createDuocylinder, createHypercone, createGrandAntiprism,
+  type GeometryND 
+} from '../../core/geometry';
 
 /**
  * Creates the N-dimensional geometry based on current settings
@@ -19,6 +23,16 @@ function createGeometry(type: string, dimension: number): GeometryND {
       return createOrthoplex(dimension);
     case '24-cell':
       return create24Cell();
+    case '600-cell':
+      return create600Cell();
+    case 'clifford-torus':
+      return createCliffordTorus();
+    case 'duocylinder':
+      return createDuocylinder();
+    case 'hypercone':
+      return createHypercone();
+    case 'grand-antiprism':
+      return createGrandAntiprism();
     default:
       return createHypercube(dimension);
   }

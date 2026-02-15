@@ -4,6 +4,11 @@ import {
   createSimplex,
   createOrthoplex,
   create24Cell,
+  create600Cell,
+  createCliffordTorus,
+  createDuocylinder,
+  createHypercone,
+  createGrandAntiprism,
 } from './polytopes';
 
 describe('createHypercube', () => {
@@ -125,5 +130,65 @@ describe('create24Cell', () => {
     const cell24 = create24Cell();
     expect(cell24.dimension).toBe(4);
     expect(cell24.vertices[0].dimension).toBe(4);
+  });
+});
+
+describe('create600Cell', () => {
+  it('creates vertices and edges', () => {
+    const cell600 = create600Cell();
+    expect(cell600.vertices.length).toBeGreaterThan(20);
+    expect(cell600.edges.length).toBeGreaterThan(0);
+    expect(cell600.dimension).toBe(4);
+  });
+  
+  it('has triangular faces', () => {
+    const cell600 = create600Cell();
+    expect(cell600.faces).toBeDefined();
+    expect(cell600.faces!.length).toBeGreaterThan(0);
+  });
+});
+
+describe('createCliffordTorus', () => {
+  it('creates a 4D torus with grid topology', () => {
+    const torus = createCliffordTorus(8, 8);
+    expect(torus.vertices.length).toBe(64);
+    expect(torus.edges.length).toBeGreaterThan(0);
+    expect(torus.dimension).toBe(4);
+  });
+  
+  it('all vertices have the same distance from origin', () => {
+    const torus = createCliffordTorus(16, 16);
+    const dist = torus.vertices[0].magnitude();
+    for (const v of torus.vertices) {
+      expect(v.magnitude()).toBeCloseTo(dist, 4);
+    }
+  });
+});
+
+describe('createDuocylinder', () => {
+  it('creates a 4D duocylinder', () => {
+    const duo = createDuocylinder(10);
+    expect(duo.vertices.length).toBe(100);
+    expect(duo.edges.length).toBeGreaterThan(0);
+    expect(duo.dimension).toBe(4);
+  });
+});
+
+describe('createHypercone', () => {
+  it('creates a 4D cone with apex', () => {
+    const cone = createHypercone(8, 4);
+    expect(cone.vertices.length).toBeGreaterThan(0);
+    expect(cone.dimension).toBe(4);
+    // First vertex is the apex at W=height
+    expect(cone.vertices[0].get(3)).toBeGreaterThan(0);
+  });
+});
+
+describe('createGrandAntiprism', () => {
+  it('creates a grand antiprism with 100 vertices', () => {
+    const antiprism = createGrandAntiprism();
+    expect(antiprism.vertices.length).toBe(100);
+    expect(antiprism.edges.length).toBeGreaterThan(0);
+    expect(antiprism.dimension).toBe(4);
   });
 });
