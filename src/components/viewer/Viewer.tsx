@@ -1,8 +1,12 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { NDGeometry } from './NDGeometry';
+import { PhysicsGeometry } from './PhysicsGeometry';
+import { useAppStore } from '../../stores/appStore';
 
 export function Viewer() {
+  const { physicsEnabled } = useAppStore();
+  
   return (
     <Canvas
       camera={{ position: [4, 3, 4], fov: 50 }}
@@ -11,8 +15,8 @@ export function Viewer() {
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
       
-      {/* The N-dimensional geometry */}
-      <NDGeometry />
+      {/* The N-dimensional geometry - either physics or rotation mode */}
+      {physicsEnabled ? <PhysicsGeometry /> : <NDGeometry />}
       
       {/* 3D navigation controls */}
       <OrbitControls 

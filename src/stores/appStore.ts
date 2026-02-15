@@ -28,8 +28,12 @@ export interface AppState {
   
   // Cross-section slicer
   sliceEnabled: boolean;
-  slicePosition: number; // W position of the slice plane (-1 to 1)
+  slicePosition: number;
   sliceAnimating: boolean;
+  
+  // Physics simulation
+  physicsEnabled: boolean;
+  gravityAxis: number; // 0=X, 1=Y, 2=Z, 3=W
   
   // Actions
   setGeometryType: (type: AppState['geometryType']) => void;
@@ -46,6 +50,8 @@ export interface AppState {
   setSliceEnabled: (enabled: boolean) => void;
   setSlicePosition: (pos: number) => void;
   toggleSliceAnimation: () => void;
+  setPhysicsEnabled: (enabled: boolean) => void;
+  setGravityAxis: (axis: number) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -59,13 +65,15 @@ export const useAppStore = create<AppState>((set) => ({
   viewDistance: 3,
   isAnimating: true,
   animationSpeed: 0.5,
-  activeRotationPlanes: ['XW', 'YW'], // Default: rotate in XW and YW planes
+  activeRotationPlanes: ['XW', 'YW'],
   sliceEnabled: false,
   slicePosition: 0,
   sliceAnimating: false,
+  physicsEnabled: false,
+  gravityAxis: 3, // W axis by default
   
   // Actions
-  setGeometryType: (type) => set({ geometryType: type, customGeometry: null }),
+  setGeometryType: (type) => set({ geometryType: type, customGeometry: null, physicsEnabled: false }),
   
   setRenderMode: (mode) => set({ renderMode: mode }),
   
@@ -129,4 +137,8 @@ export const useAppStore = create<AppState>((set) => ({
   setSlicePosition: (pos) => set({ slicePosition: pos }),
   
   toggleSliceAnimation: () => set((state) => ({ sliceAnimating: !state.sliceAnimating })),
+  
+  setPhysicsEnabled: (enabled) => set({ physicsEnabled: enabled, isAnimating: !enabled }),
+  
+  setGravityAxis: (axis) => set({ gravityAxis: axis }),
 }));

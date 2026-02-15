@@ -223,6 +223,65 @@ export function ControlPanel() {
           )}
         </div>
       )}
+
+      {/* Physics Simulation */}
+      <PhysicsControls />
+    </div>
+  );
+}
+
+function PhysicsControls() {
+  const {
+    dimension,
+    physicsEnabled,
+    setPhysicsEnabled,
+    gravityAxis,
+    setGravityAxis,
+  } = useAppStore();
+
+  const axisNames = ['X', 'Y', 'Z', 'W', 'V', 'U'];
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-700">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm text-gray-400">🎮 Physics Mode</label>
+        <button
+          onClick={() => setPhysicsEnabled(!physicsEnabled)}
+          className={`px-3 py-1 rounded text-sm ${
+            physicsEnabled 
+              ? 'bg-red-600 hover:bg-red-700' 
+              : 'bg-gray-700 hover:bg-gray-600'
+          }`}
+        >
+          {physicsEnabled ? 'On' : 'Off'}
+        </button>
+      </div>
+      
+      {physicsEnabled && (
+        <>
+          <label className="block text-sm text-gray-400 mb-2">
+            Gravity Direction
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: dimension }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => setGravityAxis(i)}
+                className={`px-3 py-1 rounded text-xs font-mono ${
+                  gravityAxis === i
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                -{axisNames[i] ?? `A${i}`}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Watch the {dimension}D shape fall and bounce in N-dimensional gravity!
+          </p>
+        </>
+      )}
     </div>
   );
 }

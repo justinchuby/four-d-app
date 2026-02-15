@@ -16,6 +16,7 @@ const presetFormulas = {
       const { R, r, uSteps, vSteps } = params;
       const vertices: VectorND[] = [];
       const edges: [number, number][] = [];
+      const faces: number[][] = [];
       
       for (let i = 0; i < uSteps; i++) {
         for (let j = 0; j < vSteps; j++) {
@@ -32,28 +33,35 @@ const presetFormulas = {
         }
       }
       
-      // Connect grid
+      // Connect grid and create faces
       for (let i = 0; i < uSteps; i++) {
         for (let j = 0; j < vSteps; j++) {
           const current = i * vSteps + j;
           const nextU = ((i + 1) % uSteps) * vSteps + j;
           const nextV = i * vSteps + ((j + 1) % vSteps);
+          const nextUV = ((i + 1) % uSteps) * vSteps + ((j + 1) % vSteps);
+          
           edges.push([current, nextU]);
           edges.push([current, nextV]);
+          
+          // Create quad face (as two triangles)
+          faces.push([current, nextU, nextUV]);
+          faces.push([current, nextUV, nextV]);
         }
       }
       
-      return { name: '4D Torus', dimension: 4, vertices, edges };
+      return { name: '4D Torus', dimension: 4, vertices, edges, faces };
     }
   },
   hypersphere: {
-    name: '4D Sphere (wireframe)',
+    name: '4D Sphere',
     description: 'A 3-sphere in 4D space',
     params: { radius: 1, latSteps: 12, lonSteps: 12 },
     generate: (params: { radius: number; latSteps: number; lonSteps: number }) => {
       const { radius, latSteps, lonSteps } = params;
       const vertices: VectorND[] = [];
       const edges: [number, number][] = [];
+      const faces: number[][] = [];
       
       // Generate points on 3-sphere using hyperspherical coordinates
       for (let i = 0; i <= latSteps; i++) {
@@ -71,19 +79,26 @@ const presetFormulas = {
         }
       }
       
-      // Connect grid
+      // Connect grid and create faces
       for (let i = 0; i < latSteps; i++) {
         for (let j = 0; j < lonSteps; j++) {
           const current = i * lonSteps + j;
           const nextLat = (i + 1) * lonSteps + j;
           const nextLon = i * lonSteps + ((j + 1) % lonSteps);
+          const nextLatLon = (i + 1) * lonSteps + ((j + 1) % lonSteps);
           
           if (i < latSteps) edges.push([current, nextLat]);
           edges.push([current, nextLon]);
+          
+          // Create quad face as two triangles
+          if (i < latSteps) {
+            faces.push([current, nextLat, nextLatLon]);
+            faces.push([current, nextLatLon, nextLon]);
+          }
         }
       }
       
-      return { name: '4D Sphere', dimension: 4, vertices, edges };
+      return { name: '4D Sphere', dimension: 4, vertices, edges, faces };
     }
   },
   spiral4D: {

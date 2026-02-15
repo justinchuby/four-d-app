@@ -1,0 +1,207 @@
+import { useEffect, useRef, useMemo } from 'react';
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
+import { useAppStore } from '../../stores/appStore';
+import { PhysicsEngine } from '../../core/physics';
+import { projectTo3D, type ProjectionConfig } from '../../core/projection';
+import { createHypercube, createSimplex, createOrthoplex, create24Cell, type GeometryND } from '../../core/geometry';
+
+function createGeometry(type: string, dimension: number): GeometryND {
+  switch (type) {
+    case 'hypercube': return createHypercube(dimension);
+    case 'simplex': return createSimplex(dimension);
+    case 'orthoplex': return createOrthoplex(dimension);
+    case '24-cell': return create24Cell();
+    default: return createHypercube(dimension);
+  }
+}
+
+interface PhysicsGeometryProps {
+  lineWidth?: number;
+}
+
+export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
+  const {
+    geometryType,
+    dimension,
+    customGeometry,
+    renderMode,
+    projectionType,
+    viewDistance,
+    physicsEnabled,
+    gravityAxis,
+  } = useAppStore();
+
+  // Create base geometry
+  const baseGeometry = useMemo(() => {
+    if (geometryType === 'custom' && customGeometry) {
+      return customGeometry;
+    }
+    return createGeometry(geometryType, dimension);
+  }, [geometryType, dimension, customGeometry]);
+
+  // Physics engine reference
+  const physicsRef = useRef<PhysicsEngine | null>(null);
+  const initializedRef = useRef(false);
+
+  // Initialize physics when geometry changes
+  useEffect(() => {
+    if (!physicsEnabled) {
+      physicsRef.current = null;
+      initializedRef.current = false;
+      return;
+    }
+
+    const engine = new PhysicsEngine(dimension);
+    engine.addGeometryParticles(baseGeometry.vertices);
+    engine.setGravityAxis(gravityAxis);
+    physicsRef.current = engine;
+    initializedRef.current = true;
+  }, [physicsEnabled, baseGeometry, dimension, gravityAxis]);
+
+  // Update gravity when axis changes
+  useEffect(() => {
+    if (physicsRef.current) {
+      physicsRef.current.setGravityAxis(gravityAxis);
+    }
+  }, [gravityAxis]);
+
+  // Buffer geometries
+  const linesRef = useMemo(() => ({ current: new THREE.BufferGeometry() }), []);
+  const pointsRef = useMemo(() => ({ current: new THREE.BufferGeometry() }), []);
+  const meshRef = useMemo(() => ({ current: new THREE.BufferGeometry() }), []);
+
+  useFrame((_, delta) => {
+    if (!physicsEnabled || !physicsRef.current) return;
+
+    // Calculate average edge length for spring rest length
+    let totalLength = 0;
+    for (const [i, j] of baseGeometry.edges) {
+      totalLength += baseGeometry.vertices[i].subtract(baseGeometry.vertices[j]).magnitude();
+    }
+    const avgLength = totalLength / baseGeometry.edges.length;
+
+    // Step physics with spring constraints
+    physicsRef.current.step(delta, baseGeometry.edges);
+    
+    // Also apply springs to maintain structure
+    physicsRef.current.applySpringForces(baseGeometry.edges, avgLength, 3);
+
+    // Get simulated positions
+    const positions = physicsRef.current.getPositions();
+
+    // Project to 3D
+    const projectionConfig: ProjectionConfig = {
+      type: projectionType,
+      viewDistance,
+    };
+
+    const projectedVertices = positions.map(v => projectTo3D(v, projectionConfig));
+
+    // Build edges
+    const linePositions: number[] = [];
+    const lineColors: number[] = [];
+
+    for (const [i, j] of baseGeometry.edges) {
+      const v1 = projectedVertices[i];
+      const v2 = projectedVertices[j];
+
+      linePositions.push(v1.get(0), v1.get(1), v1.get(2));
+      linePositions.push(v2.get(0), v2.get(1), v2.get(2));
+
+      const w1 = positions[i].get(3) ?? 0;
+      const w2 = positions[j].get(3) ?? 0;
+      const hue1 = 0.6 - (w1 + 2.5) * 0.12;
+      const hue2 = 0.6 - (w2 + 2.5) * 0.12;
+
+      const color1 = new THREE.Color().setHSL(hue1, 0.8, 0.6);
+      const color2 = new THREE.Color().setHSL(hue2, 0.8, 0.6);
+
+      lineColors.push(color1.r, color1.g, color1.b);
+      lineColors.push(color2.r, color2.g, color2.b);
+    }
+
+    linesRef.current.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+    linesRef.current.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
+
+    // Build points
+    const pointPositions: number[] = [];
+    const pointColors: number[] = [];
+
+    for (let i = 0; i < projectedVertices.length; i++) {
+      const v = projectedVertices[i];
+      pointPositions.push(v.get(0), v.get(1), v.get(2));
+
+      const w = positions[i].get(3) ?? 0;
+      const hue = 0.6 - (w + 2.5) * 0.12;
+      const color = new THREE.Color().setHSL(hue, 0.9, 0.7);
+      pointColors.push(color.r, color.g, color.b);
+    }
+
+    pointsRef.current.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3));
+    pointsRef.current.setAttribute('color', new THREE.Float32BufferAttribute(pointColors, 3));
+
+    // Build faces
+    if (baseGeometry.faces && baseGeometry.faces.length > 0) {
+      const facePositions: number[] = [];
+      const faceColors: number[] = [];
+
+      for (const face of baseGeometry.faces) {
+        if (face.length === 3) {
+          for (const idx of face) {
+            const v = projectedVertices[idx];
+            facePositions.push(v.get(0), v.get(1), v.get(2));
+
+            const w = positions[idx].get(3) ?? 0;
+            const hue = 0.6 - (w + 2.5) * 0.12;
+            const color = new THREE.Color().setHSL(hue, 0.6, 0.5);
+            faceColors.push(color.r, color.g, color.b);
+          }
+        } else if (face.length === 4) {
+          const triangles = [[0, 1, 2], [0, 2, 3]];
+          for (const tri of triangles) {
+            for (const t of tri) {
+              const idx = face[t];
+              const v = projectedVertices[idx];
+              facePositions.push(v.get(0), v.get(1), v.get(2));
+
+              const w = positions[idx].get(3) ?? 0;
+              const hue = 0.6 - (w + 2.5) * 0.12;
+              const color = new THREE.Color().setHSL(hue, 0.6, 0.5);
+              faceColors.push(color.r, color.g, color.b);
+            }
+          }
+        }
+      }
+
+      meshRef.current.setAttribute('position', new THREE.Float32BufferAttribute(facePositions, 3));
+      meshRef.current.setAttribute('color', new THREE.Float32BufferAttribute(faceColors, 3));
+      meshRef.current.computeVertexNormals();
+    }
+  });
+
+  if (!physicsEnabled) return null;
+
+  const showWireframe = renderMode === 'wireframe' || renderMode === 'both';
+  const showFaces = renderMode === 'solid' || renderMode === 'both';
+
+  return (
+    <group>
+      {showFaces && baseGeometry.faces && baseGeometry.faces.length > 0 && (
+        <mesh geometry={meshRef.current}>
+          <meshBasicMaterial vertexColors transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+      )}
+      {showWireframe && (
+        <>
+          <lineSegments geometry={linesRef.current}>
+            <lineBasicMaterial vertexColors linewidth={lineWidth} />
+          </lineSegments>
+          <points geometry={pointsRef.current}>
+            <pointsMaterial vertexColors size={0.12} sizeAttenuation />
+          </points>
+        </>
+      )}
+    </group>
+  );
+}
