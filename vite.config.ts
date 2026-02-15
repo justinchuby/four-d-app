@@ -5,5 +5,5 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/', // Root path for custom domain (four-d-app.justinchuby.io)
+  base: '/four-d-app/', // GitHub Pages: justinchuby.github.io/four-d-app/
 })
