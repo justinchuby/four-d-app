@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { Viewer } from './components/viewer';
 import { ControlPanel, ParametricEditor, StatsDisplay, KeyboardShortcuts } from './components/ui';
-import { InfoPanel } from './components/educational';
+import { InfoPanel, MathPanel, FlatlandDemo } from './components/educational';
 import { useAppStore } from './stores/appStore';
 
 function App() {
   const { geometryType, dimension, customGeometry, setCustomGeometry } = useAppStore();
+  const [showFlatland, setShowFlatland] = useState(false);
   
   // Get readable name
   const shapeNames: Record<string, string> = {
@@ -37,6 +39,14 @@ function App() {
         <p className="text-xs text-gray-600 mt-0.5">
           Space: play/pause • R: reset • 1-4: shapes
         </p>
+        
+        {/* Flatland Demo Button */}
+        <button
+          onClick={() => setShowFlatland(true)}
+          className="mt-3 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm flex items-center gap-2"
+        >
+          📖 Flatland Demo
+        </button>
       </div>
       
       {/* Control Panel */}
@@ -50,6 +60,12 @@ function App() {
       
       {/* Educational Info Panel */}
       <InfoPanel />
+      
+      {/* Math Panel */}
+      <MathPanel />
+      
+      {/* Flatland Demo Modal */}
+      <FlatlandDemo isOpen={showFlatland} onClose={() => setShowFlatland(false)} />
     </div>
   );
 }

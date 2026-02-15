@@ -7,6 +7,8 @@ export function ControlPanel() {
     setGeometryType,
     dimension,
     setDimension,
+    renderMode,
+    setRenderMode,
     projectionType,
     setProjectionType,
     viewDistance,
@@ -18,12 +20,18 @@ export function ControlPanel() {
     activeRotationPlanes,
     toggleRotationPlane,
     resetRotations,
+    sliceEnabled,
+    setSliceEnabled,
+    slicePosition,
+    setSlicePosition,
+    sliceAnimating,
+    toggleSliceAnimation,
   } = useAppStore();
 
   const rotationPlanes = getRotationPlaneNames(dimension);
 
   return (
-    <div className="absolute top-4 right-4 w-72 bg-gray-900/90 backdrop-blur-sm rounded-lg p-4 text-white shadow-xl border border-gray-700">
+    <div className="absolute top-4 right-4 w-72 max-h-[90vh] overflow-y-auto bg-gray-900/90 backdrop-blur-sm rounded-lg p-4 text-white shadow-xl border border-gray-700">
       <h2 className="text-lg font-bold mb-4 text-cyan-400">Controls</h2>
       
       {/* Geometry Selection */}
@@ -60,6 +68,20 @@ export function ControlPanel() {
           <span>5D</span>
           <span>6D</span>
         </div>
+      </div>
+
+      {/* Render Mode */}
+      <div className="mb-4">
+        <label className="block text-sm text-gray-400 mb-1">Render Mode</label>
+        <select
+          value={renderMode}
+          onChange={(e) => setRenderMode(e.target.value as any)}
+          className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+        >
+          <option value="both">Faces + Wireframe</option>
+          <option value="wireframe">Wireframe Only</option>
+          <option value="solid">Faces Only</option>
+        </select>
       </div>
 
       {/* Projection Type */}
@@ -152,6 +174,55 @@ export function ControlPanel() {
       >
         Reset Rotations
       </button>
+
+      {/* Cross-Section Slicer */}
+      {dimension >= 4 && (
+        <div className="mt-4 pt-4 border-t border-gray-700">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm text-gray-400">4D Cross-Section</label>
+            <button
+              onClick={() => setSliceEnabled(!sliceEnabled)}
+              className={`px-3 py-1 rounded text-sm ${
+                sliceEnabled 
+                  ? 'bg-orange-600 hover:bg-orange-700' 
+                  : 'bg-gray-700 hover:bg-gray-600'
+              }`}
+            >
+              {sliceEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          
+          {sliceEnabled && (
+            <>
+              <label className="block text-sm text-gray-400 mb-1">
+                Slice W = {slicePosition.toFixed(2)}
+              </label>
+              <input
+                type="range"
+                min={-1.5}
+                max={1.5}
+                step={0.01}
+                value={slicePosition}
+                onChange={(e) => setSlicePosition(parseFloat(e.target.value))}
+                className="w-full accent-orange-500"
+              />
+              <button
+                onClick={toggleSliceAnimation}
+                className={`w-full mt-2 py-1 rounded text-sm ${
+                  sliceAnimating 
+                    ? 'bg-orange-600 hover:bg-orange-700' 
+                    : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                {sliceAnimating ? '⏸ Stop Slice Animation' : '▶ Animate Slice'}
+              </button>
+              <p className="text-xs text-gray-500 mt-2">
+                Watch the shape appear/disappear as the 3D "slice" moves through 4D space!
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

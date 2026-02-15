@@ -56,11 +56,14 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
     geometryType, 
     dimension,
     customGeometry,
+    renderMode,
     projectionType, 
     viewDistance,
     isAnimating,
     animationSpeed,
     activeRotationPlanes,
+    sliceEnabled,
+    sliceAnimating,
   } = useAppStore();
   
   // Create the base geometry
@@ -78,6 +81,11 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
   
   // Create refs for vertex points
   const pointsRef = useMemo(() => {
+    return { current: new THREE.BufferGeometry() };
+  }, []);
+  
+  // Create refs for face mesh
+  const meshRef = useMemo(() => {
     return { current: new THREE.BufferGeometry() };
   }, []);
 
@@ -98,8 +106,15 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
       useAppStore.setState({ rotationAngles: newAngles });
     }
     
-    // Get current angles
+    // Update slice position for animation
+    if (sliceAnimating && sliceEnabled) {
+      const newSlice = Math.sin(Date.now() * 0.001 * animationSpeed);
+      useAppStore.setState({ slicePosition: newSlice });
+    }
+    
+    // Get current state
     const currentAngles = useAppStore.getState().rotationAngles;
+    const currentSlicePos = useAppStore.getState().slicePosition;
     
     // Build rotation matrix
     const rotationMatrix = buildRotationMatrix(dimension, currentAngles);
@@ -118,6 +133,15 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
     const projectedVertices = transformedVertices.map(v => 
       projectTo3D(v, projectionConfig)
     );
+    
+    // Calculate vertex alpha for smooth fade (for cross-section mode)
+    // Calculate vertex alpha for smooth fade
+    const vertexAlpha = transformedVertices.map(v => {
+      if (!sliceEnabled || dimension < 4) return 1;
+      const w = v.get(3) ?? 0;
+      const dist = Math.abs(w - currentSlicePos);
+      return Math.max(0, 1 - dist * 2);
+    });
     
     // Build line segments for edges
     const positions: number[] = [];
@@ -178,16 +202,83 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
       'color',
       new THREE.Float32BufferAttribute(pointColors, 3)
     );
+    
+    // Build faces mesh (triangulated)
+    if (baseGeometry.faces && baseGeometry.faces.length > 0) {
+      const facePositions: number[] = [];
+      const faceColors: number[] = [];
+      
+      for (const face of baseGeometry.faces) {
+        // Triangulate face (assuming quads or triangles)
+        if (face.length === 3) {
+          // Triangle
+          for (const idx of face) {
+            const v = projectedVertices[idx];
+            facePositions.push(v.get(0), v.get(1), v.get(2));
+            
+            const w = transformedVertices[idx].get(3) ?? 0;
+            const alpha = vertexAlpha[idx];
+            const hue = 0.6 - (w + 1) * 0.3;
+            const color = new THREE.Color().setHSL(hue, 0.6, 0.5);
+            faceColors.push(color.r * alpha, color.g * alpha, color.b * alpha);
+          }
+        } else if (face.length === 4) {
+          // Quad - split into two triangles
+          const triangles = [[0, 1, 2], [0, 2, 3]];
+          for (const tri of triangles) {
+            for (const t of tri) {
+              const idx = face[t];
+              const v = projectedVertices[idx];
+              facePositions.push(v.get(0), v.get(1), v.get(2));
+              
+              const w = transformedVertices[idx].get(3) ?? 0;
+              const alpha = vertexAlpha[idx];
+              const hue = 0.6 - (w + 1) * 0.3;
+              const color = new THREE.Color().setHSL(hue, 0.6, 0.5);
+              faceColors.push(color.r * alpha, color.g * alpha, color.b * alpha);
+            }
+          }
+        }
+      }
+      
+      meshRef.current.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(facePositions, 3)
+      );
+      meshRef.current.setAttribute(
+        'color',
+        new THREE.Float32BufferAttribute(faceColors, 3)
+      );
+      meshRef.current.computeVertexNormals();
+    }
   });
+
+  const showWireframe = renderMode === 'wireframe' || renderMode === 'both';
+  const showFaces = renderMode === 'solid' || renderMode === 'both';
 
   return (
     <group>
-      <lineSegments geometry={linesRef.current}>
-        <lineBasicMaterial vertexColors linewidth={lineWidth} />
-      </lineSegments>
-      <points geometry={pointsRef.current}>
-        <pointsMaterial vertexColors size={0.08} sizeAttenuation />
-      </points>
+      {showFaces && baseGeometry.faces && baseGeometry.faces.length > 0 && (
+        <mesh geometry={meshRef.current}>
+          <meshBasicMaterial 
+            vertexColors 
+            transparent 
+            opacity={0.3} 
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+      {showWireframe && (
+        <>
+          <lineSegments geometry={linesRef.current}>
+            <lineBasicMaterial vertexColors linewidth={lineWidth} />
+          </lineSegments>
+          <points geometry={pointsRef.current}>
+            <pointsMaterial vertexColors size={0.08} sizeAttenuation />
+          </points>
+        </>
+      )}
     </group>
   );
 }

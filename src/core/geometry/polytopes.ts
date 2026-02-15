@@ -57,11 +57,46 @@ export function createHypercube(dimension: number, size = 1): GeometryND {
   
   const names = ['Point', 'Segment', 'Square', 'Cube', 'Tesseract', '5-cube', '6-cube', '7-cube'];
   
+  // Generate faces (2D faces of the hypercube)
+  // A face is defined by fixing (n-2) coordinates and varying 2
+  const faces: number[][] = [];
+  if (dimension >= 2) {
+    // For each pair of axes, and each combination of fixed values for other axes
+    for (let axis1 = 0; axis1 < dimension; axis1++) {
+      for (let axis2 = axis1 + 1; axis2 < dimension; axis2++) {
+        // For each combination of fixed coordinates
+        const otherAxes = [];
+        for (let d = 0; d < dimension; d++) {
+          if (d !== axis1 && d !== axis2) otherAxes.push(d);
+        }
+        
+        const numCombinations = Math.pow(2, otherAxes.length);
+        for (let combo = 0; combo < numCombinations; combo++) {
+          // Build the 4 vertices of this square face
+          const faceVertices: number[] = [];
+          for (let corner = 0; corner < 4; corner++) {
+            let vertexIndex = 0;
+            // Set bits for axis1 and axis2
+            if (corner === 1 || corner === 2) vertexIndex |= (1 << axis1);
+            if (corner === 2 || corner === 3) vertexIndex |= (1 << axis2);
+            // Set bits for other axes based on combo
+            for (let k = 0; k < otherAxes.length; k++) {
+              if ((combo >> k) & 1) vertexIndex |= (1 << otherAxes[k]);
+            }
+            faceVertices.push(vertexIndex);
+          }
+          faces.push(faceVertices);
+        }
+      }
+    }
+  }
+  
   return {
     name: names[dimension] ?? `${dimension}-cube`,
     dimension,
     vertices,
     edges,
+    faces,
   };
 }
 
@@ -118,6 +153,16 @@ export function createSimplex(dimension: number, size = 1): GeometryND {
     }
   }
   
+  // Generate faces: all triangles (combinations of 3 vertices)
+  const faces: number[][] = [];
+  for (let i = 0; i <= dimension; i++) {
+    for (let j = i + 1; j <= dimension; j++) {
+      for (let k = j + 1; k <= dimension; k++) {
+        faces.push([i, j, k]);
+      }
+    }
+  }
+  
   const names = ['Point', 'Segment', 'Triangle', 'Tetrahedron', '5-cell', '5-simplex', '6-simplex'];
   
   return {
@@ -125,6 +170,7 @@ export function createSimplex(dimension: number, size = 1): GeometryND {
     dimension,
     vertices: normalizedVertices,
     edges,
+    faces,
   };
 }
 
@@ -167,6 +213,23 @@ export function createOrthoplex(dimension: number, size = 1): GeometryND {
     }
   }
   
+  // Generate faces: triangles formed by vertices from 3 different axes
+  const faces: number[][] = [];
+  for (let a1 = 0; a1 < dimension; a1++) {
+    for (let a2 = a1 + 1; a2 < dimension; a2++) {
+      for (let a3 = a2 + 1; a3 < dimension; a3++) {
+        // Each combination of signs gives a triangle
+        for (let s1 = 0; s1 < 2; s1++) {
+          for (let s2 = 0; s2 < 2; s2++) {
+            for (let s3 = 0; s3 < 2; s3++) {
+              faces.push([a1 * 2 + s1, a2 * 2 + s2, a3 * 2 + s3]);
+            }
+          }
+        }
+      }
+    }
+  }
+  
   const names = ['Point', 'Segment', 'Square', 'Octahedron', '16-cell', '5-orthoplex'];
   
   return {
@@ -174,6 +237,7 @@ export function createOrthoplex(dimension: number, size = 1): GeometryND {
     dimension,
     vertices,
     edges,
+    faces,
   };
 }
 
@@ -223,11 +287,30 @@ export function create24Cell(size = 1): GeometryND {
     }
   }
   
+  // Generate triangular faces by finding edge triangles
+  const faces: number[][] = [];
+  const edgeSet = new Set(edges.map(([a, b]) => `${Math.min(a,b)}-${Math.max(a,b)}`));
+  
+  for (let i = 0; i < vertices.length; i++) {
+    for (let j = i + 1; j < vertices.length; j++) {
+      for (let k = j + 1; k < vertices.length; k++) {
+        // Check if all three edges exist
+        const e1 = `${i}-${j}`;
+        const e2 = `${i}-${k}`;
+        const e3 = `${j}-${k}`;
+        if (edgeSet.has(e1) && edgeSet.has(e2) && edgeSet.has(e3)) {
+          faces.push([i, j, k]);
+        }
+      }
+    }
+  }
+  
   return {
     name: '24-cell',
     dimension: 4,
     vertices,
     edges,
+    faces,
   };
 }
 
