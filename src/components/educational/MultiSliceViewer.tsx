@@ -184,15 +184,74 @@ function SliceGeometry({
       lineColors.push(c2.r, c2.g, c2.b);
     }
 
-    // Draw faces - only if all vertices are in slice
+    // Sutherland-Hodgman polygon clipping against W bounds
+    const clipPolygonAgainstW = (polygon: VectorND[], minW: number, maxW: number): VectorND[] => {
+      // Clip against minW plane
+      let output = polygon;
+      
+      // Clip against W >= minW
+      let input = output;
+      output = [];
+      for (let i = 0; i < input.length; i++) {
+        const current = input[i];
+        const next = input[(i + 1) % input.length];
+        const currentW = current.get(3) ?? 0;
+        const nextW = next.get(3) ?? 0;
+        
+        if (currentW >= minW) {
+          output.push(current);
+          if (nextW < minW) {
+            output.push(interpolateAtW(current, next, minW));
+          }
+        } else if (nextW >= minW) {
+          output.push(interpolateAtW(current, next, minW));
+        }
+      }
+      
+      // Clip against W <= maxW
+      input = output;
+      output = [];
+      for (let i = 0; i < input.length; i++) {
+        const current = input[i];
+        const next = input[(i + 1) % input.length];
+        const currentW = current.get(3) ?? 0;
+        const nextW = next.get(3) ?? 0;
+        
+        if (currentW <= maxW) {
+          output.push(current);
+          if (nextW > maxW) {
+            output.push(interpolateAtW(current, next, maxW));
+          }
+        } else if (nextW <= maxW) {
+          output.push(interpolateAtW(current, next, maxW));
+        }
+      }
+      
+      return output;
+    };
+
+    // Draw faces with proper clipping
     if (geometry.faces) {
       for (const face of geometry.faces) {
-        const faceInSlice = face.every(vi => inSlice[vi]);
-        if (!faceInSlice) continue;
-
-        // Project face vertices
-        const projectedFace = face.map(vi => {
-          const slicedCoords = [...offsetVertices[vi].components];
+        // Get face vertices
+        const faceVertices = face.map(vi => offsetVertices[vi]);
+        
+        // Check if face intersects with slice at all
+        const faceWs = faceVertices.map(v => v.get(3) ?? 0);
+        const faceMinW = Math.min(...faceWs);
+        const faceMaxW = Math.max(...faceWs);
+        
+        // Skip if face is completely outside slice
+        if (faceMaxW < sliceMin || faceMinW > sliceMax) continue;
+        
+        // Clip the face polygon against slice bounds
+        const clippedFace = clipPolygonAgainstW(faceVertices, sliceMin, sliceMax);
+        
+        if (clippedFace.length < 3) continue;
+        
+        // Project clipped face vertices
+        const projectedFace = clippedFace.map(v => {
+          const slicedCoords = [...v.components];
           slicedCoords[3] = sliceW;
           return projectTo3D(new VectorND(slicedCoords), projConfig);
         });
@@ -207,7 +266,7 @@ function SliceGeometry({
           facePositions.push(p1.get(0), p1.get(1), p1.get(2));
           facePositions.push(p2.get(0), p2.get(1), p2.get(2));
 
-          // Color by average W
+          // Color by average W of original face
           const avgW = face.reduce((sum, vi) => sum + (geometry.vertices[vi].get(3) ?? 0), 0) / face.length;
           const hue = 0.6 - (avgW + 1.5) * 0.2;
           const color = new THREE.Color().setHSL(hue, 0.7, 0.5);
