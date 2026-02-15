@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { getRotationPlanes } from '../core/math';
 import type { ProjectionType } from '../core/projection';
+import type { GeometryND } from '../core/geometry';
 
 export interface AppState {
   // Geometry
-  geometryType: 'hypercube' | 'simplex' | 'orthoplex' | '24-cell';
+  geometryType: 'hypercube' | 'simplex' | 'orthoplex' | '24-cell' | 'custom';
   dimension: number;
+  customGeometry: GeometryND | null;
   
   // Rotation state - angles for each rotation plane
   rotationAngles: Record<string, number>;
@@ -22,6 +24,7 @@ export interface AppState {
   // Actions
   setGeometryType: (type: AppState['geometryType']) => void;
   setDimension: (dim: number) => void;
+  setCustomGeometry: (geometry: GeometryND | null) => void;
   setRotationAngle: (plane: string, angle: number) => void;
   setProjectionType: (type: ProjectionType) => void;
   setViewDistance: (distance: number) => void;
@@ -35,6 +38,7 @@ export const useAppStore = create<AppState>((set) => ({
   // Initial state
   geometryType: 'hypercube',
   dimension: 4,
+  customGeometry: null,
   rotationAngles: {},
   projectionType: 'perspective',
   viewDistance: 3,
@@ -43,7 +47,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeRotationPlanes: ['XW', 'YW'], // Default: rotate in XW and YW planes
   
   // Actions
-  setGeometryType: (type) => set({ geometryType: type }),
+  setGeometryType: (type) => set({ geometryType: type, customGeometry: null }),
   
   setDimension: (dim) => set(() => {
     // Reset rotation angles and active planes when dimension changes
@@ -62,7 +66,19 @@ export const useAppStore = create<AppState>((set) => ({
       dimension: dim,
       rotationAngles: {},
       activeRotationPlanes: activePlanes,
+      customGeometry: null,
     };
+  }),
+  
+  setCustomGeometry: (geometry) => set(() => {
+    if (geometry) {
+      return { 
+        customGeometry: geometry, 
+        geometryType: 'custom' as const,
+        dimension: geometry.dimension,
+      };
+    }
+    return { customGeometry: null, geometryType: 'hypercube' as const };
   }),
   
   setRotationAngle: (plane, angle) => set((state) => ({

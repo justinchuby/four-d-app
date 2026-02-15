@@ -1,10 +1,10 @@
 import { Viewer } from './components/viewer';
-import { ControlPanel } from './components/ui';
+import { ControlPanel, ParametricEditor, StatsDisplay, KeyboardShortcuts } from './components/ui';
 import { InfoPanel } from './components/educational';
 import { useAppStore } from './stores/appStore';
 
 function App() {
-  const { geometryType, dimension } = useAppStore();
+  const { geometryType, dimension, customGeometry, setCustomGeometry } = useAppStore();
   
   // Get readable name
   const shapeNames: Record<string, string> = {
@@ -12,10 +12,14 @@ function App() {
     simplex: dimension === 4 ? '5-cell' : `${dimension + 1}-simplex`,
     orthoplex: dimension === 4 ? '16-cell' : `${dimension}-orthoplex`,
     '24-cell': '24-cell',
+    custom: customGeometry?.name || 'Custom Shape',
   };
 
   return (
     <div className="w-full h-full relative">
+      {/* Keyboard shortcuts handler */}
+      <KeyboardShortcuts />
+      
       {/* 3D Viewer */}
       <Viewer />
       
@@ -30,10 +34,19 @@ function App() {
         <p className="text-xs text-gray-500 mt-1">
           Drag to rotate view • Scroll to zoom
         </p>
+        <p className="text-xs text-gray-600 mt-0.5">
+          Space: play/pause • R: reset • 1-4: shapes
+        </p>
       </div>
       
       {/* Control Panel */}
       <ControlPanel />
+      
+      {/* Stats Display */}
+      <StatsDisplay />
+      
+      {/* Parametric Shape Editor */}
+      <ParametricEditor onGeometryChange={setCustomGeometry} />
       
       {/* Educational Info Panel */}
       <InfoPanel />

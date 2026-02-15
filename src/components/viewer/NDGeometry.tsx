@@ -55,6 +55,7 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
   const { 
     geometryType, 
     dimension,
+    customGeometry,
     projectionType, 
     viewDistance,
     isAnimating,
@@ -64,8 +65,11 @@ export function NDGeometry({ lineWidth = 2 }: NDGeometryProps) {
   
   // Create the base geometry
   const baseGeometry = useMemo(() => {
+    if (geometryType === 'custom' && customGeometry) {
+      return customGeometry;
+    }
     return createGeometry(geometryType, dimension);
-  }, [geometryType, dimension]);
+  }, [geometryType, dimension, customGeometry]);
   
   // Create refs for the lines geometry
   const linesRef = useMemo(() => {
