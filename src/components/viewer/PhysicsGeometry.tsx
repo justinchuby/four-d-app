@@ -193,10 +193,97 @@ export function PhysicsGeometry({ lineWidth = 2 }: PhysicsGeometryProps) {
   const showFaces = renderMode === 'solid' || renderMode === 'both';
 
   // Boundary box size (projected from physics bounds)
-  const boxSize = 4; // Approximate 3D projection of 4D bounds
+  const boxSize = 4;
+  
+  // Create gravity arrow geometry
+  const gravityArrowsGeometry = useMemo(() => {
+    const positions: number[] = [];
+    const arrowLength = 0.5;
+    const spacing = 1.2;
+    
+    // Create a grid of gravity arrows
+    for (let x = -1; x <= 1; x++) {
+      for (let z = -1; z <= 1; z++) {
+        const startX = x * spacing;
+        const startY = 1.8;
+        const startZ = z * spacing;
+        
+        let endX = startX;
+        let endY = startY;
+        let endZ = startZ;
+        
+        if (gravityAxis === 0) { // X
+          endX -= arrowLength;
+        } else if (gravityAxis === 1) { // Y
+          endY -= arrowLength;
+        } else if (gravityAxis === 2) { // Z
+          endZ -= arrowLength;
+        } else { // W or higher - show as diagonal down + inward
+          endY -= arrowLength * 0.7;
+          endX *= 0.8;
+          endZ *= 0.8;
+        }
+        
+        positions.push(startX, startY, startZ);
+        positions.push(endX, endY, endZ);
+      }
+    }
+    
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geo;
+  }, [gravityAxis]);
+
+  // Arrow head positions and rotations
+  const arrowHeads = useMemo(() => {
+    const heads: { position: [number, number, number]; rotation: [number, number, number] }[] = [];
+    const arrowLength = 0.5;
+    const spacing = 1.2;
+    
+    for (let x = -1; x <= 1; x++) {
+      for (let z = -1; z <= 1; z++) {
+        let endX = x * spacing;
+        let endY = 1.8;
+        let endZ = z * spacing;
+        let rotX = 0, rotY = 0, rotZ = 0;
+        
+        if (gravityAxis === 0) { // X
+          endX -= arrowLength;
+          rotZ = Math.PI / 2;
+        } else if (gravityAxis === 1) { // Y
+          endY -= arrowLength;
+          rotX = Math.PI;
+        } else if (gravityAxis === 2) { // Z
+          endZ -= arrowLength;
+          rotX = Math.PI / 2;
+        } else { // W or higher
+          endY -= arrowLength * 0.7;
+          endX *= 0.8;
+          endZ *= 0.8;
+          rotX = Math.PI * 0.85;
+        }
+        
+        heads.push({ position: [endX, endY, endZ], rotation: [rotX, rotY, rotZ] });
+      }
+    }
+    return heads;
+  }, [gravityAxis]);
 
   return (
     <group>
+      {/* Gravity field arrows */}
+      <group>
+        <lineSegments geometry={gravityArrowsGeometry}>
+          <lineBasicMaterial color="#ff6666" transparent opacity={0.7} />
+        </lineSegments>
+        {arrowHeads.map((head, i) => (
+          <mesh key={i} position={head.position} rotation={head.rotation}>
+            <coneGeometry args={[0.05, 0.12, 6]} />
+            <meshBasicMaterial color="#ff6666" transparent opacity={0.8} />
+          </mesh>
+        ))}
+      </group>
+
       {/* Boundary box to show the physics container */}
       <group>
         <mesh position={[0, -boxSize/2, 0]}>
