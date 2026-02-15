@@ -27,28 +27,6 @@ interface SliceViewProps {
 }
 
 /**
- * Compute intersection point of an edge with the W=sliceW hyperplane
- */
-function computeSliceIntersection(v1: VectorND, v2: VectorND, sliceW: number): VectorND | null {
-  const w1 = v1.get(3) ?? 0;
-  const w2 = v2.get(3) ?? 0;
-  
-  // Check if the edge crosses the slice plane
-  if ((w1 - sliceW) * (w2 - sliceW) > 0) {
-    return null; // Both on same side, no intersection
-  }
-  
-  // Compute interpolation parameter
-  const t = (sliceW - w1) / (w2 - w1);
-  if (t < 0 || t > 1) return null;
-  
-  // Interpolate all coordinates
-  const coords = v1.components.map((c, i) => c + t * (v2.get(i) - c));
-  coords[3] = sliceW; // Ensure exact W value
-  return new VectorND(coords);
-}
-
-/**
  * Animated slice geometry component using useFrame for smooth animation
  */
 function SliceGeometry({ 
@@ -132,46 +110,19 @@ function SliceGeometry({
       }
     }
 
-    // Draw edges - clip to slice bounds
+    // Draw edges - show if both vertices are in slice (simpler, cleaner visualization)
     for (const [i, j] of geometry.edges) {
-      const w1 = vertexW[i];
-      const w2 = vertexW[j];
+      // Only show edges where both vertices are visible in this slice
+      if (!inSlice[i] || !inSlice[j]) continue;
+
+      // Project both vertices at the slice W position
+      const v1Sliced = [...offsetVertices[i].components];
+      v1Sliced[3] = sliceW;
+      const v2Sliced = [...offsetVertices[j].components];
+      v2Sliced[3] = sliceW;
       
-      // Skip if both vertices are completely outside on the same side
-      if ((w1 < sliceMin && w2 < sliceMin) || (w1 > sliceMax && w2 > sliceMax)) {
-        continue;
-      }
-
-      // Get start and end points (possibly clipped)
-      let start = offsetVertices[i];
-      let end = offsetVertices[j];
-
-      // Clip start point if outside
-      if (w1 < sliceMin) {
-        const intersection = computeSliceIntersection(offsetVertices[i], offsetVertices[j], sliceMin);
-        if (intersection) start = intersection;
-      } else if (w1 > sliceMax) {
-        const intersection = computeSliceIntersection(offsetVertices[i], offsetVertices[j], sliceMax);
-        if (intersection) start = intersection;
-      }
-
-      // Clip end point if outside
-      if (w2 < sliceMin) {
-        const intersection = computeSliceIntersection(offsetVertices[j], offsetVertices[i], sliceMin);
-        if (intersection) end = intersection;
-      } else if (w2 > sliceMax) {
-        const intersection = computeSliceIntersection(offsetVertices[j], offsetVertices[i], sliceMax);
-        if (intersection) end = intersection;
-      }
-
-      // Project clipped points
-      const startSliced = [...start.components];
-      startSliced[3] = sliceW;
-      const endSliced = [...end.components];
-      endSliced[3] = sliceW;
-      
-      const p1 = projectTo3D(new VectorND(startSliced), projConfig);
-      const p2 = projectTo3D(new VectorND(endSliced), projConfig);
+      const p1 = projectTo3D(new VectorND(v1Sliced), projConfig);
+      const p2 = projectTo3D(new VectorND(v2Sliced), projConfig);
       
       linePositions.push(p1.get(0), p1.get(1), p1.get(2));
       linePositions.push(p2.get(0), p2.get(1), p2.get(2));
@@ -258,15 +209,10 @@ function SliceView({
     const sliceMin = sliceW - sliceThickness;
     const sliceMax = sliceW + sliceThickness;
     
-    for (const [i, j] of geometry.edges) {
-      const w1 = (geometry.vertices[i].get(3) ?? 0) + (objectPosition[3] ?? 0);
-      const w2 = (geometry.vertices[j].get(3) ?? 0) + (objectPosition[3] ?? 0);
-      
-      // Edge intersects if one vertex is below and one above, or either is inside
-      if ((w1 >= sliceMin && w1 <= sliceMax) || (w2 >= sliceMin && w2 <= sliceMax)) {
-        return true;
-      }
-      if ((w1 < sliceMin && w2 > sliceMax) || (w1 > sliceMax && w2 < sliceMin)) {
+    // Check if any vertex is in the slice
+    for (const v of geometry.vertices) {
+      const w = (v.get(3) ?? 0) + (objectPosition[3] ?? 0);
+      if (w >= sliceMin && w <= sliceMax) {
         return true;
       }
     }
@@ -282,14 +228,8 @@ function SliceView({
         <Canvas camera={{ position: [3, 2, 3], fov: 50 }}>
           <ambientLight intensity={0.5} />
           
-          {/* Slice plane indicator */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-            <planeGeometry args={[4, 4]} />
-            <meshBasicMaterial color="#113333" transparent opacity={0.2} side={THREE.DoubleSide} />
-          </mesh>
-          
-          {/* Grid for reference */}
-          <gridHelper args={[4, 8, '#334444', '#223333']} />
+          {/* Grid for reference - rendered first so it's behind */}
+          <gridHelper args={[4, 8, '#334444', '#223333']} position={[0, -2, 0]} />
           
           <SliceGeometry
             geometry={geometry}
