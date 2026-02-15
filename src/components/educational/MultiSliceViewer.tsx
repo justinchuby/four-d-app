@@ -94,6 +94,16 @@ function SliceGeometry({
     const facePositions: number[] = [];
     const faceColors: number[] = [];
 
+    // Helper to interpolate between two vertices at a specific W value
+    const interpolateAtW = (v1: VectorND, v2: VectorND, targetW: number): VectorND => {
+      const w1 = v1.get(3) ?? 0;
+      const w2 = v2.get(3) ?? 0;
+      if (Math.abs(w2 - w1) < 0.0001) return v1;
+      const t = (targetW - w1) / (w2 - w1);
+      const coords = v1.components.map((c, idx) => c + t * ((v2.get(idx) ?? 0) - c));
+      return new VectorND(coords);
+    };
+
     // Draw vertices that are in the slice
     for (let i = 0; i < offsetVertices.length; i++) {
       if (inSlice[i]) {
@@ -110,19 +120,55 @@ function SliceGeometry({
       }
     }
 
-    // Draw edges - show if both vertices are in slice (simpler, cleaner visualization)
+    // Draw edges with proper clipping
     for (const [i, j] of geometry.edges) {
-      // Only show edges where both vertices are visible in this slice
-      if (!inSlice[i] || !inSlice[j]) continue;
+      const w1 = vertexW[i];
+      const w2 = vertexW[j];
+      const in1 = inSlice[i];
+      const in2 = inSlice[j];
 
-      // Project both vertices at the slice W position
-      const v1Sliced = [...offsetVertices[i].components];
-      v1Sliced[3] = sliceW;
-      const v2Sliced = [...offsetVertices[j].components];
-      v2Sliced[3] = sliceW;
+      // Skip if both completely outside
+      if (!in1 && !in2) {
+        // Check if edge passes through slice
+        if (!((w1 < sliceMin && w2 > sliceMax) || (w1 > sliceMax && w2 < sliceMin))) {
+          continue;
+        }
+      }
+
+      // Determine the actual endpoints to draw
+      let start: VectorND;
+      let end: VectorND;
+
+      if (in1 && in2) {
+        // Both inside - use actual vertices
+        start = offsetVertices[i];
+        end = offsetVertices[j];
+      } else if (in1 && !in2) {
+        // First inside, second outside - clip second
+        start = offsetVertices[i];
+        const clipW = w2 < sliceMin ? sliceMin : sliceMax;
+        end = interpolateAtW(offsetVertices[i], offsetVertices[j], clipW);
+      } else if (!in1 && in2) {
+        // First outside, second inside - clip first
+        const clipW = w1 < sliceMin ? sliceMin : sliceMax;
+        start = interpolateAtW(offsetVertices[i], offsetVertices[j], clipW);
+        end = offsetVertices[j];
+      } else {
+        // Both outside but edge passes through - clip both ends
+        const clipW1 = w1 < sliceMin ? sliceMin : sliceMax;
+        const clipW2 = w2 < sliceMin ? sliceMin : sliceMax;
+        start = interpolateAtW(offsetVertices[i], offsetVertices[j], clipW1);
+        end = interpolateAtW(offsetVertices[i], offsetVertices[j], clipW2);
+      }
+
+      // Project clipped endpoints at slice W
+      const startSliced = [...start.components];
+      startSliced[3] = sliceW;
+      const endSliced = [...end.components];
+      endSliced[3] = sliceW;
       
-      const p1 = projectTo3D(new VectorND(v1Sliced), projConfig);
-      const p2 = projectTo3D(new VectorND(v2Sliced), projConfig);
+      const p1 = projectTo3D(new VectorND(startSliced), projConfig);
+      const p2 = projectTo3D(new VectorND(endSliced), projConfig);
       
       linePositions.push(p1.get(0), p1.get(1), p1.get(2));
       linePositions.push(p2.get(0), p2.get(1), p2.get(2));
@@ -204,15 +250,19 @@ function SliceView({
   geometry, sliceW, sliceThickness, objectPosition, rotationAngles, label, 
   projectionType, isAnimatingRotation, rotationSpeed 
 }: SliceViewProps) {
-  // Check if any edges cross through the slice (not just vertices)
+  // Check if any edges cross through the slice
   const hasContent = useMemo(() => {
     const sliceMin = sliceW - sliceThickness;
     const sliceMax = sliceW + sliceThickness;
     
-    // Check if any vertex is in the slice
-    for (const v of geometry.vertices) {
-      const w = (v.get(3) ?? 0) + (objectPosition[3] ?? 0);
-      if (w >= sliceMin && w <= sliceMax) {
+    for (const [i, j] of geometry.edges) {
+      const w1 = (geometry.vertices[i].get(3) ?? 0) + (objectPosition[3] ?? 0);
+      const w2 = (geometry.vertices[j].get(3) ?? 0) + (objectPosition[3] ?? 0);
+      
+      // Check if edge overlaps with slice range
+      const edgeMin = Math.min(w1, w2);
+      const edgeMax = Math.max(w1, w2);
+      if (edgeMax >= sliceMin && edgeMin <= sliceMax) {
         return true;
       }
     }
