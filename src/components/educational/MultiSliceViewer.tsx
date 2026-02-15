@@ -27,6 +27,28 @@ interface SliceViewProps {
 }
 
 /**
+ * Compute intersection point of an edge with the W=sliceW hyperplane
+ */
+function computeSliceIntersection(v1: VectorND, v2: VectorND, sliceW: number): VectorND | null {
+  const w1 = v1.get(3) ?? 0;
+  const w2 = v2.get(3) ?? 0;
+  
+  // Check if the edge crosses the slice plane
+  if ((w1 - sliceW) * (w2 - sliceW) > 0) {
+    return null; // Both on same side, no intersection
+  }
+  
+  // Compute interpolation parameter
+  const t = (sliceW - w1) / (w2 - w1);
+  if (t < 0 || t > 1) return null;
+  
+  // Interpolate all coordinates
+  const coords = v1.components.map((c, i) => c + t * (v2.get(i) - c));
+  coords[3] = sliceW; // Ensure exact W value
+  return new VectorND(coords);
+}
+
+/**
  * Animated slice geometry component using useFrame for smooth animation
  */
 function SliceGeometry({ 
@@ -41,6 +63,7 @@ function SliceGeometry({
 }: Omit<SliceViewProps, 'label'>) {
   const linesRef = useRef<THREE.BufferGeometry>(new THREE.BufferGeometry());
   const pointsRef = useRef<THREE.BufferGeometry>(new THREE.BufferGeometry());
+  const meshRef = useRef<THREE.BufferGeometry>(new THREE.BufferGeometry());
   const rotationRef = useRef(0);
 
   useFrame((_, delta) => {
@@ -72,23 +95,17 @@ function SliceGeometry({
     });
 
     const projConfig: ProjectionConfig = { type: projectionType, viewDistance: 3 };
+    const sliceMin = sliceW - sliceThickness;
+    const sliceMax = sliceW + sliceThickness;
 
     // Check which vertices are in this slice
+    const vertexW: number[] = [];
     const inSlice: boolean[] = [];
-    const projected: VectorND[] = [];
     
     for (const v of offsetVertices) {
       const w = v.get(3) ?? 0;
-      const isIn = Math.abs(w - sliceW) <= sliceThickness;
-      inSlice.push(isIn);
-      
-      if (isIn) {
-        const slicedCoords = [...v.components];
-        slicedCoords[3] = sliceW;
-        projected.push(projectTo3D(new VectorND(slicedCoords), projConfig));
-      } else {
-        projected.push(projectTo3D(v, projConfig));
-      }
+      vertexW.push(w);
+      inSlice.push(w >= sliceMin && w <= sliceMax);
     }
 
     // Build geometry data
@@ -96,11 +113,16 @@ function SliceGeometry({
     const lineColors: number[] = [];
     const pointPositions: number[] = [];
     const pointColors: number[] = [];
+    const facePositions: number[] = [];
+    const faceColors: number[] = [];
 
     // Draw vertices that are in the slice
     for (let i = 0; i < offsetVertices.length; i++) {
       if (inSlice[i]) {
-        const p = projected[i];
+        const slicedCoords = [...offsetVertices[i].components];
+        slicedCoords[3] = sliceW;
+        const p = projectTo3D(new VectorND(slicedCoords), projConfig);
+        
         pointPositions.push(p.get(0), p.get(1), p.get(2));
         
         const originalW = geometry.vertices[i].get(3) ?? 0;
@@ -110,24 +132,93 @@ function SliceGeometry({
       }
     }
 
-    // Draw edges where both vertices are in slice
+    // Draw edges - clip to slice bounds
     for (const [i, j] of geometry.edges) {
-      if (inSlice[i] && inSlice[j]) {
-        const p1 = projected[i];
-        const p2 = projected[j];
-        
-        linePositions.push(p1.get(0), p1.get(1), p1.get(2));
-        linePositions.push(p2.get(0), p2.get(1), p2.get(2));
+      const w1 = vertexW[i];
+      const w2 = vertexW[j];
+      
+      // Skip if both vertices are completely outside on the same side
+      if ((w1 < sliceMin && w2 < sliceMin) || (w1 > sliceMax && w2 > sliceMax)) {
+        continue;
+      }
 
-        const w1 = geometry.vertices[i].get(3) ?? 0;
-        const w2 = geometry.vertices[j].get(3) ?? 0;
-        const hue1 = 0.6 - (w1 + 1.5) * 0.2;
-        const hue2 = 0.6 - (w2 + 1.5) * 0.2;
-        const c1 = new THREE.Color().setHSL(hue1, 0.9, 0.6);
-        const c2 = new THREE.Color().setHSL(hue2, 0.9, 0.6);
-        
-        lineColors.push(c1.r, c1.g, c1.b);
-        lineColors.push(c2.r, c2.g, c2.b);
+      // Get start and end points (possibly clipped)
+      let start = offsetVertices[i];
+      let end = offsetVertices[j];
+
+      // Clip start point if outside
+      if (w1 < sliceMin) {
+        const intersection = computeSliceIntersection(offsetVertices[i], offsetVertices[j], sliceMin);
+        if (intersection) start = intersection;
+      } else if (w1 > sliceMax) {
+        const intersection = computeSliceIntersection(offsetVertices[i], offsetVertices[j], sliceMax);
+        if (intersection) start = intersection;
+      }
+
+      // Clip end point if outside
+      if (w2 < sliceMin) {
+        const intersection = computeSliceIntersection(offsetVertices[j], offsetVertices[i], sliceMin);
+        if (intersection) end = intersection;
+      } else if (w2 > sliceMax) {
+        const intersection = computeSliceIntersection(offsetVertices[j], offsetVertices[i], sliceMax);
+        if (intersection) end = intersection;
+      }
+
+      // Project clipped points
+      const startSliced = [...start.components];
+      startSliced[3] = sliceW;
+      const endSliced = [...end.components];
+      endSliced[3] = sliceW;
+      
+      const p1 = projectTo3D(new VectorND(startSliced), projConfig);
+      const p2 = projectTo3D(new VectorND(endSliced), projConfig);
+      
+      linePositions.push(p1.get(0), p1.get(1), p1.get(2));
+      linePositions.push(p2.get(0), p2.get(1), p2.get(2));
+
+      const origW1 = geometry.vertices[i].get(3) ?? 0;
+      const origW2 = geometry.vertices[j].get(3) ?? 0;
+      const hue1 = 0.6 - (origW1 + 1.5) * 0.2;
+      const hue2 = 0.6 - (origW2 + 1.5) * 0.2;
+      const c1 = new THREE.Color().setHSL(hue1, 0.9, 0.6);
+      const c2 = new THREE.Color().setHSL(hue2, 0.9, 0.6);
+      
+      lineColors.push(c1.r, c1.g, c1.b);
+      lineColors.push(c2.r, c2.g, c2.b);
+    }
+
+    // Draw faces - only if all vertices are in slice
+    if (geometry.faces) {
+      for (const face of geometry.faces) {
+        const faceInSlice = face.every(vi => inSlice[vi]);
+        if (!faceInSlice) continue;
+
+        // Project face vertices
+        const projectedFace = face.map(vi => {
+          const slicedCoords = [...offsetVertices[vi].components];
+          slicedCoords[3] = sliceW;
+          return projectTo3D(new VectorND(slicedCoords), projConfig);
+        });
+
+        // Triangulate (fan from first vertex)
+        for (let k = 1; k < projectedFace.length - 1; k++) {
+          const p0 = projectedFace[0];
+          const p1 = projectedFace[k];
+          const p2 = projectedFace[k + 1];
+          
+          facePositions.push(p0.get(0), p0.get(1), p0.get(2));
+          facePositions.push(p1.get(0), p1.get(1), p1.get(2));
+          facePositions.push(p2.get(0), p2.get(1), p2.get(2));
+
+          // Color by average W
+          const avgW = face.reduce((sum, vi) => sum + (geometry.vertices[vi].get(3) ?? 0), 0) / face.length;
+          const hue = 0.6 - (avgW + 1.5) * 0.2;
+          const color = new THREE.Color().setHSL(hue, 0.7, 0.5);
+          
+          for (let v = 0; v < 3; v++) {
+            faceColors.push(color.r, color.g, color.b);
+          }
+        }
       }
     }
 
@@ -136,15 +227,20 @@ function SliceGeometry({
     linesRef.current.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
     pointsRef.current.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3));
     pointsRef.current.setAttribute('color', new THREE.Float32BufferAttribute(pointColors, 3));
+    meshRef.current.setAttribute('position', new THREE.Float32BufferAttribute(facePositions, 3));
+    meshRef.current.setAttribute('color', new THREE.Float32BufferAttribute(faceColors, 3));
   });
 
   return (
     <>
+      <mesh geometry={meshRef.current}>
+        <meshBasicMaterial vertexColors transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
       <lineSegments geometry={linesRef.current}>
         <lineBasicMaterial vertexColors />
       </lineSegments>
       <points geometry={pointsRef.current}>
-        <pointsMaterial vertexColors size={0.15} sizeAttenuation />
+        <pointsMaterial vertexColors size={0.12} sizeAttenuation />
       </points>
     </>
   );
@@ -157,12 +253,20 @@ function SliceView({
   geometry, sliceW, sliceThickness, objectPosition, rotationAngles, label, 
   projectionType, isAnimatingRotation, rotationSpeed 
 }: SliceViewProps) {
-  // Check if any vertices would be in the slice (for "no intersection" message)
+  // Check if any edges cross through the slice (not just vertices)
   const hasContent = useMemo(() => {
-    for (const v of geometry.vertices) {
-      const w = v.get(3) ?? 0;
-      const offsetW = w + (objectPosition[3] ?? 0);
-      if (Math.abs(offsetW - sliceW) <= sliceThickness) {
+    const sliceMin = sliceW - sliceThickness;
+    const sliceMax = sliceW + sliceThickness;
+    
+    for (const [i, j] of geometry.edges) {
+      const w1 = (geometry.vertices[i].get(3) ?? 0) + (objectPosition[3] ?? 0);
+      const w2 = (geometry.vertices[j].get(3) ?? 0) + (objectPosition[3] ?? 0);
+      
+      // Edge intersects if one vertex is below and one above, or either is inside
+      if ((w1 >= sliceMin && w1 <= sliceMax) || (w2 >= sliceMin && w2 <= sliceMax)) {
+        return true;
+      }
+      if ((w1 < sliceMin && w2 > sliceMax) || (w1 > sliceMax && w2 < sliceMin)) {
         return true;
       }
     }
